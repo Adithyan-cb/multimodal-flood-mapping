@@ -6,7 +6,8 @@ Stages:
 * (a) fetch pre-event OSM layers and write them as GeoJSON;
 * (b) with ``--mask``, measure exposure of buildings, roads and bridges to the
   flood class;
-* (c) cut-off settlement analysis (not implemented yet).
+* (c) with ``--mask``, build the road graph and classify every settlement's
+  road access to each hub group before vs after the flood.
 
 Example
 -------
@@ -35,6 +36,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 import geopandas as gpd
+import pandas as pd
 from shapely.geometry import box
 
 from floodmap.acquisition.aoi import BoundingBox
@@ -42,10 +44,19 @@ from floodmap.infrastructure.exposure import (
     NOT_OBSERVED,
     ExposureRules,
     assess_exposure,
+    measure_lines,
     summarize_exposure,
 )
 from floodmap.infrastructure.mask import FloodMask, MaskError, load_flood_mask
 from floodmap.infrastructure.osm import OsmError, OsmLayers, fetch_pre_event_osm
+from floodmap.network.connectivity import (
+    POTENTIALLY_CUT_OFF,
+    STATUSES,
+    ConnectivityRules,
+    assess_connectivity,
+)
+from floodmap.network.graph import build_road_network
+from floodmap.utils.provenance import REQUIRED_ATTRIBUTIONS
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -119,6 +130,79 @@ def _print_exposure(summary: dict) -> None:
             print(f"    {highway:<14} {km} km")
 
 
+def run_connectivity(osm: OsmLayers, mask: FloodMask, step_m: float):
+    """Stage (c): road graph, before/after reachability, settlement statuses."""
+    rules = ConnectivityRules.from_config()
+    settlement_points = osm.layers["settlements"].to_crs(mask.crs).representative_point()
+    hub_points = osm.layers["hubs"].to_crs(mask.crs).representative_point()
+    network, (settlement_snap, hub_snap) = build_road_network(
+        osm.layers["roads"], mask.crs, [settlement_points, hub_points], rules.snap_max_m
+    )
+    measured = measure_lines(network.pieces.geometry, mask, step_m)
+    pieces_measured = pd.concat([network.pieces[["piece_id"]], measured], axis=1)
+    results, routes, summary = assess_connectivity(
+        network,
+        pieces_measured,
+        osm.layers["settlements"],
+        settlement_snap,
+        osm.layers["hubs"],
+        hub_snap,
+        rules,
+    )
+    summary["mask"] = {"path": str(mask.path), "synthetic": mask.synthetic}
+    summary["attribution"] = list(REQUIRED_ATTRIBUTIONS)
+    return results, routes, summary
+
+
+def write_connectivity(results, routes, summary, out_dir: Path) -> None:
+    (out_dir / "connectivity_settlements.geojson").write_text(
+        results.to_json(drop_id=True), encoding="utf-8"
+    )
+    (out_dir / "connectivity_routes.geojson").write_text(
+        routes.to_json(drop_id=True), encoding="utf-8"
+    )
+    (out_dir / "connectivity_summary.json").write_text(
+        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def _print_connectivity(summary: dict) -> None:
+    graph = summary["graph"]
+    print()
+    print(
+        f"Road graph: {graph['nodes']} nodes, {graph['edges']} pieces, {graph['road_km']} km, "
+        f"{graph['connected_components']} components"
+    )
+    print(
+        f"  removed at default threshold: {graph['removed_pieces_optimistic']} pieces "
+        f"({graph['removed_km_optimistic']} km), "
+        f"{graph['removed_pieces_pessimistic']} if nodata blocks"
+    )
+    s = summary["settlements"]
+    print(f"  settlements on the network: {s['on_network']} of {s['total']}")
+    short = {
+        "CONNECTED": "CONN",
+        "POTENTIALLY_DISRUPTED": "DISRUPT",
+        "POTENTIALLY_CUT_OFF": "CUT_OFF",
+        "UNKNOWN": "UNKNOWN",
+        "INSUFFICIENT_DATA": "NO_DATA",
+    }
+    print()
+    print(f"  {'hub group':<10} {'hubs':>6} " + " ".join(f"{short[x]:>8}" for x in STATUSES))
+    for group, entry in summary["groups"].items():
+        counts = entry["status_counts"]
+        hubs = f"{entry['hubs_on_network']}/{entry['hubs_total']}"
+        print(f"  {group:<10} {hubs:>6} " + " ".join(f"{counts[x]:>8}" for x in STATUSES))
+    print("\n  potentially cut off, by disruption threshold (m):")
+    for group, per_threshold in summary["sensitivity_by_disruption_m"].items():
+        cells = ", ".join(f"{t} m: {v[POTENTIALLY_CUT_OFF]}" for t, v in per_threshold.items())
+        print(f"    {group:<10} {cells}")
+    for group, entry in summary["groups"].items():
+        names = [c["name"] or c["osm_id"] for c in entry["potentially_cut_off"]]
+        if names:
+            print(f"\n  {group}, potentially cut off: {', '.join(names)}")
+
+
 def _print_summary(osm: OsmLayers, out_dir: Path) -> None:
     print(f"OSM snapshot: {osm.provenance['snapshot']} (event {osm.provenance['event_date']})")
     print(f"AOI bbox:     {osm.aoi.as_list()}")
@@ -174,6 +258,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         summary["osm"] = {k: osm.provenance[k] for k in ("snapshot", "event_date", "aoi_bbox")}
         write_exposure(assessed, summary, out_dir)
         _print_exposure(summary)
+
+        results, routes, connectivity = run_connectivity(osm, mask, rules.line_sample_step_m)
+        write_connectivity(results, routes, connectivity, out_dir)
+        _print_connectivity(connectivity)
     return 0
 
 

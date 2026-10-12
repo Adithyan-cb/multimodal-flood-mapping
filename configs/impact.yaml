@@ -94,3 +94,34 @@ exposure:
   # A building is EXPOSED when at least this many flood pixels touch its
   # footprint.
   building_min_flood_px: 1
+
+# -----------------------------------------------------------------------------
+# Road network and settlement connectivity (AGENTS.md §9, PRD.md §9)
+#
+# Graph: undirected (oneway tags ignored: in an emergency the question is
+# whether a road exists, not its legal direction). Edges are road pieces
+# between junctions, a junction being any OSM node shared by two ways, a way
+# end, or the road vertex a settlement or hub attaches to. Weight is length.
+#
+# Disruption: a piece is removed when its flooded length reaches the
+# threshold (or all of it, if shorter). Roads outside the flood mask are
+# assumed passable, which is an assumption, not an observation.
+#
+# Status per settlement and hub group, comparing before vs after the flood:
+#   CONNECTED              reaches a hub; route not much longer
+#   POTENTIALLY_DISRUPTED  reaches a hub, but the route grew by detour_ratio
+#   POTENTIALLY_CUT_OFF    reached a hub before, reaches none after
+#   UNKNOWN                cut off only if nodata pixels hide flood
+#   INSUFFICIENT_DATA      no mapped road nearby, or no road route to a hub
+#                          even before the flood
+# -----------------------------------------------------------------------------
+network:
+  # Settlements and hubs farther than this from any road get no verdict.
+  snap_max_m: 500
+  # Flooded length (m) on one piece that removes it. Matches
+  # exposure.line_min_flooded_m so "exposed" and "removed" agree by default.
+  default_disruption_m: 10
+  # Re-run with these thresholds and report how the cut-off count moves.
+  sensitivity_disruption_m: [10, 30, 100]
+  # Route longer than this multiple of the pre-event route is a detour.
+  detour_ratio: 1.5
