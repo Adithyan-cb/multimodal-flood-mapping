@@ -16,5 +16,8 @@ Key constraints
   structurally failed, inaccessible, isolated unless the evidence genuinely
   supports the stronger claim (AGENTS.md §8).
 
-Status: NOT IMPLEMENTED.
+Modules
+-------
+* ``osm``: pre-event OSM retrieval from the ohsome API (implemented).
+* exposure against the flood mask: not implemented yet.
 """
