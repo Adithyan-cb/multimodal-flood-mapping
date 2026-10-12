@@ -169,7 +169,9 @@ def tile_bbox(bbox: BoundingBox, tile_deg: float) -> List[Tile]:
 # ---------------------------------------------------------------------------
 
 
-def features_to_frame(features: Sequence[Mapping[str, Any]], snapshot: datetime) -> gpd.GeoDataFrame:
+def features_to_frame(
+    features: Sequence[Mapping[str, Any]], snapshot: datetime
+) -> gpd.GeoDataFrame:
     """Keep versions valid at ``snapshot``, deduplicate by OSM id, build a frame.
 
     A history response holds every version of an element inside the window. A
@@ -433,18 +435,14 @@ def fetch_pre_event_osm(
         "buildings", filters["buildings"], aoi, "aoi", osm_config["building_tile_deg"]
     )
     point_tile_deg = osm_config.get("point_tile_deg", tile_deg)
-    layers["settlements"] = fetch(
-        "settlements", filters["settlements"], aoi, "aoi", point_tile_deg
-    )
+    layers["settlements"] = fetch("settlements", filters["settlements"], aoi, "aoi", point_tile_deg)
 
     hub_frames = []
     for group, hub_filter in hub_filters.items():
         frame = fetch(f"hubs_{group}", hub_filter, extent, "aoi+buffer", point_tile_deg)
         frame.insert(0, "hub_group", group)
         hub_frames.append(frame)
-    layers["hubs"] = gpd.GeoDataFrame(
-        pd.concat(hub_frames, ignore_index=True), crs="EPSG:4326"
-    )
+    layers["hubs"] = gpd.GeoDataFrame(pd.concat(hub_frames, ignore_index=True), crs="EPSG:4326")
 
     provenance = {
         "source": "OpenStreetMap via the ohsome API",

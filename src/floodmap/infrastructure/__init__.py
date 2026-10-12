@@ -18,6 +18,7 @@ Key constraints
 
 Modules
 -------
-* ``osm``: pre-event OSM retrieval from the ohsome API (implemented).
-* exposure against the flood mask: not implemented yet.
+* ``osm``: pre-event OSM retrieval from the ohsome API.
+* ``mask``: flood class mask loading, validated against the M4 output contract.
+* ``exposure``: per-feature exposure of buildings, roads and bridges.
 """

@@ -76,3 +76,21 @@ osm:
   hubs:
     hospital: "amenity=hospital"
     town: "place in (town, city)"
+
+# -----------------------------------------------------------------------------
+# Exposure of buildings, roads and bridges to the predicted flood class
+#
+# "Exposed" means spatial overlap with the flood class (class mask value for
+# "Floods" in configs/segmentation.yaml). It is not evidence of damage
+# (AGENTS.md §8). Permanent water never makes a feature exposed.
+# -----------------------------------------------------------------------------
+exposure:
+  # Roads and bridges are sampled every this many metres. Half the 10 m pixel
+  # (C2), so every pixel a line crosses gets at least one sample.
+  line_sample_step_m: 5.0
+  # A road or bridge is EXPOSED when at least this much of it lies on flood
+  # pixels (or all of it, if it is shorter). One pixel width.
+  line_min_flooded_m: 10.0
+  # A building is EXPOSED when at least this many flood pixels touch its
+  # footprint.
+  building_min_flood_px: 1

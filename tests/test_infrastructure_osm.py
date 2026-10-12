@@ -65,7 +65,9 @@ class FakeHttp:
 
     def get(self, url, timeout):
         assert url.endswith("/metadata")
-        return _Response({"extractRegion": {"temporalExtent": {"toTimestamp": "2026-07-27T09:00Z"}}})
+        return _Response(
+            {"extractRegion": {"temporalExtent": {"toTimestamp": "2026-07-27T09:00Z"}}}
+        )
 
     def post(self, url, data, timeout):
         self.posts.append((url, data))
@@ -87,13 +89,13 @@ class TestSnapshotRule:
 
     def test_snapshot_on_event_day_is_rejected(self):
         with pytest.raises(OsmError, match="validation-only"):
-            resolve_snapshot(date(2026, 7, 27), LATEST, datetime(2026, 7, 27, 1, tzinfo=timezone.utc))
+            resolve_snapshot(
+                date(2026, 7, 27), LATEST, datetime(2026, 7, 27, 1, tzinfo=timezone.utc)
+            )
 
     def test_snapshot_after_latest_data_is_rejected(self):
         with pytest.raises(OsmError, match="later than the latest"):
-            resolve_snapshot(
-                date(2026, 8, 26), LATEST, datetime(2026, 8, 1, tzinfo=timezone.utc)
-            )
+            resolve_snapshot(date(2026, 8, 26), LATEST, datetime(2026, 8, 1, tzinfo=timezone.utc))
 
     def test_event_before_any_data_cannot_slip_through_the_cap(self):
         # Latest data after the event: the cap must not move the snapshot past it.
@@ -146,7 +148,9 @@ class TestFeatureConversion:
         assert len(frame) == 1
 
     def test_english_name_is_preferred_and_tags_survive(self):
-        frame = features_to_frame([_feature("node/3", name="धुन्चे", **{"name:en": "Dhunche"})], LATEST)
+        frame = features_to_frame(
+            [_feature("node/3", name="धुन्चे", **{"name:en": "Dhunche"})], LATEST
+        )
         assert frame.loc[0, "name"] == "Dhunche"
         assert json.loads(frame.loc[0, "tags"])["name"] == "धुन्चे"
 
