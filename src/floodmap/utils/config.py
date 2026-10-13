@@ -29,6 +29,9 @@ import yaml
 #: ``impact`` holds the infrastructure-exposure and road-connectivity
 #: assumptions (OSM filters, hubs, buffer, disruption thresholds), which
 #: AGENTS.md §9 requires to be explicit and variable for sensitivity analysis.
+#:
+#: ``baseline`` holds the Sentinel-1 change-detection baseline (source, pair
+#: rule, thresholds): a non-learned flood mask the model must beat.
 EXPECTED_CONFIGS: tuple[str, ...] = (
     "data",
     "preprocessing",
@@ -36,6 +39,7 @@ EXPECTED_CONFIGS: tuple[str, ...] = (
     "segmentation",
     "evaluation",
     "impact",
+    "baseline",
 )
 
 
