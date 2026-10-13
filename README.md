@@ -313,7 +313,9 @@ namespaces awaiting their milestone; `(planned)` entries do not exist yet.
 │   ├── dataset-registry.md       # permitted vs validation-only datasets
 │   ├── scientific-assumptions.md # what the evidence does and does not support
 │   ├── evaluation-protocol.md    # splits, metrics, leakage prevention
-│   └── m4-architecture-decision.md # audited datasets -> segmentation design
+│   ├── m4-architecture-decision.md # audited datasets -> segmentation design
+│   ├── m4-dataset-adapters.md    # training-corpus adapter boundary (M4)
+│   └── dashboard-artifact-contract.md # dashboard reads artifacts, not science
 ├── data/                         # contents git-ignored (AGENTS.md §15)
 │   ├── raw/                      (empty)
 │   ├── interim/                  (empty)
@@ -323,18 +325,20 @@ namespaces awaiting their milestone; `(planned)` entries do not exist yet.
 │   └── floodmap/
 │       ├── __init__.py
 │       ├── acquisition/          # CDSE provider, selection and manifests (M1)
-│       ├── preprocessing/         # validation, alignment and M2 artifacts
+│       ├── preprocessing/        # validation, alignment and M2 artifacts
 │       ├── features/             # feature registry, transforms and M3 artifacts
+│       ├── datasets/             # permitted training-corpus adapters (M4)
 │       ├── segmentation/         (empty — namespace only)
 │       ├── infrastructure/       (empty — namespace only)
 │       ├── network/              (empty — namespace only)
 │       ├── hydrology/            (empty — namespace only)
 │       ├── evaluation/           (empty — namespace only)
 │       ├── reporting/            (empty — namespace only)
+│       ├── dashboard/            # manifest contract + synthetic demo generator
 │       └── utils/
 │           ├── provenance.py     # artifact provenance schema
 │           └── config.py         # YAML configuration loader
-├── tests/                        # M0 + M1 + M2 + M3 offline tests
+├── tests/                        # M0 + M1 + M2 + M3 + M4 + dashboard offline tests
 │   ├── conftest.py
 │   ├── test_package_structure.py
 │   ├── test_configs.py
@@ -342,13 +346,19 @@ namespaces awaiting their milestone; `(planned)` entries do not exist yet.
 │   ├── test_data_boundary.py     # enforces the AGENTS.md §3 data rule
 │   ├── test_acquisition_m1.py    # provider, selection and manifest tests
 │   ├── test_preprocessing_m2.py  # tiny synthetic raster preprocessing tests
-│   └── test_features_m3.py       # feature formulas, masking, registry, leakage
+│   ├── test_features_m3.py       # feature formulas, masking, registry, leakage
+│   ├── test_contract_freeze.py   # frozen C1-C14 decision schema
+│   ├── test_dataset_adapters.py  # M4 adapter behaviour (offline + external roots)
+│   ├── test_dashboard_contract.py # manifest contract + presentation-only guard
+│   ├── test_dashboard_demo.py    # synthetic bundle determinism and labelling
+│   └── test_dashboard_app.py     # Streamlit smoke tests via AppTest
 ├── models/                       (empty; git-ignored)
 ├── artifacts/                    (empty; git-ignored)
 ├── notebooks/                    (empty)
 ├── scripts/
 │   └── acquire.py                # metadata discovery / explicit download CLI
-├── dashboard/                    (planned — not created)
+├── dashboard/
+│   └── app.py                    # Streamlit viewer (presentation layer only)
 └── reports/                      (planned — not created)
 ```
 
@@ -398,7 +408,8 @@ warning minutes before a sudden glacier collapse.
 
 ## 14. Development status
 
-Current phase: **Milestone 3 complete — Earth Observation feature generation.**
+Current phase: **Milestone 4 complete — training-corpus adapters, and the
+dashboard artifact contract + viewer scaffolded on synthetic data.**
 
 ### What exists
 
@@ -416,6 +427,9 @@ Current phase: **Milestone 3 complete — Earth Observation feature generation.*
 | Milestone 1 EO acquisition provider, selection and manifest | **Done** (offline; AOI/windows remain operator inputs) |
 | Milestone 2 raster validation, masking, alignment and artifacts | **Done** (synthetic fixtures; production inputs/grid remain unresolved) |
 | Milestone 3 feature registry, transforms, masking and artifacts | **Done** (synthetic fixtures; band/polarisation bindings remain unresolved) |
+| Milestone 4 training-corpus adapters (`datasets/`, frozen contract) | **Done** (Kuro Siwo + Sen1Floods11, `docs/m4-dataset-adapters.md`) |
+| Dashboard artifact contract + synthetic demo bundle | **Done** (`src/floodmap/dashboard/`, `docs/dashboard-artifact-contract.md`) |
+| Streamlit dashboard viewer | **Done** (presentation layer; consumes artifacts, no science) |
 | Test infrastructure incl. data-boundary guard | **Done** |
 
 ### What does NOT exist
@@ -424,13 +438,13 @@ The following later stages are not implemented. Their corresponding
 `src/floodmap/` subpackages remain documented namespaces with no logic:
 
 - Flood/debris segmentation model (**no architecture selected** — `AGENTS.md` §5)
-- Training-corpus adapter onto the feature contract (boundary documented in
-  `docs/data-contract.md` §0.6.8; not implemented)
+- Training-corpus *training run* (the M4 adapter boundary is implemented; no
+  model has been trained and no labels have been fit)
 - Infrastructure exposure analysis
 - Road-network graph and disruption analysis
 - Settlement connectivity analysis
 - DEM flood-path tracing (bonus)
-- Dashboard
+- Presentation of real (non-synthetic) pipeline results in the dashboard
 - Situation report generation
 
 **No model has been trained and no performance has been measured.** Any
@@ -501,29 +515,41 @@ See `docs/dataset-registry.md` §5 for the remaining blockers.
 5.  Feature generation — **done (Milestone 3: registry-driven feature
     artifacts)**
 6.  Segmentation baseline — not started (**unblocked**: permitted datasets are
-    now specified; label semantics still to confirm)
+    now specified and the M4 adapters are implemented)
 7.  Unseen-Himalaya evaluation — blocked
 8.  Infrastructure impact — not started
 9.  Road-network connectivity — not started
 10. Optional DEM flood-path analysis — not started
 11. Trishuli case study — not started
-12. Dashboard — not started
+12. Dashboard — **done (contract, synthetic demo bundle, Streamlit viewer);
+    real results pending**
 13. Situation report — not started
 14. Final evaluation and limitations — not started
 15. Demo and submission packaging — not started
 
 ## 15. Development setup
 
+`pyproject.toml` is the single source of dependency truth. A `uv.lock` pins
+the resolved tree.
+
 ```bash
-# Editable install with development dependencies
-pip install -e ".[dev]"
+# Create .venv/, install the package editable + dev + dashboard extras
+uv sync --extra dev --extra dashboard
 
 # Run the test suite
-python3 -m pytest
+uv run pytest
 
 # Formatting
-black src scripts tests
+uv run black src scripts tests
+
+# Dashboard viewer (presentation layer; runs on the synthetic demo bundle and
+# banners it as such until real pipeline artifacts exist)
+uv run streamlit run dashboard/app.py
 ```
+
+Without `uv`, the equivalent is `pip install -e ".[dev,dashboard]"` and
+`python3 -m pytest`. The heavier `geo` extra (geopandas/osmnx/networkx) stays
+opt-in: `uv sync --extra dev --extra dashboard --extra geo`.
 
 ### Acquisition quick start
 
