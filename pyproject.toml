@@ -52,6 +52,17 @@ geo = [
     "networkx",
 ]
 
+# Presentation layer only. The dashboard is a visualization and
+# decision-support layer (AGENTS.md 16, architecture.md 15): it reads generated
+# artifacts and never runs acquisition, preprocessing, segmentation, network or
+# hydrology logic. These dependencies are therefore deliberately kept out of the
+# base runtime and the geo extra.
+dashboard = [
+    "streamlit>=1.36",
+    "streamlit-folium>=0.20",
+    "folium>=0.17",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
