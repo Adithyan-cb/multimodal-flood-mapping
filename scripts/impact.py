@@ -108,6 +108,14 @@ def write_exposure(assessed, summary, out_dir: Path) -> None:
     )
 
 
+def write_mask_polygons(mask: FloodMask, out_dir: Path) -> None:
+    """Display layer for the dashboard: flood / permanent water / nodata areas."""
+    polygons = mask.to_polygons(simplify_m=min(mask.pixel_size_m) / 2)
+    (out_dir / "flood_mask_polygons.geojson").write_text(
+        polygons.to_json(drop_id=True), encoding="utf-8"
+    )
+
+
 def _print_exposure(summary: dict) -> None:
     mask = summary["mask"]
     print()
@@ -257,6 +265,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         summary = summarize_exposure(assessed, mask, rules)
         summary["osm"] = {k: osm.provenance[k] for k in ("snapshot", "event_date", "aoi_bbox")}
         write_exposure(assessed, summary, out_dir)
+        write_mask_polygons(mask, out_dir)
         _print_exposure(summary)
 
         results, routes, connectivity = run_connectivity(osm, mask, rules.line_sample_step_m)

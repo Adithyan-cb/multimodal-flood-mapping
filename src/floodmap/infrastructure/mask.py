@@ -25,10 +25,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
+import geopandas as gpd
 import numpy as np
 import rasterio
 from affine import Affine
 from rasterio.crs import CRS
+from rasterio.features import shapes
+from shapely.geometry import shape
 
 from floodmap.utils.config import load_config
 
@@ -141,6 +144,27 @@ class FloodMask:
             "flood_area_km2": round(counts["flood"] * pixel_km2, 4),
             "nodata_fraction": round(counts["nodata"] / max(1, self.classes.size), 6),
         }
+
+    def to_polygons(self, simplify_m: float = 0.0) -> gpd.GeoDataFrame:
+        """Flood, permanent-water and nodata areas as EPSG:4326 polygons.
+
+        For map display only. Analysis always uses the raster. ``simplify_m``
+        smooths pixel staircases; keep it below the pixel size.
+        """
+        s = self.semantics
+        labels = {s.flood: "flood", s.permanent_water: "permanent_water", s.nodata: "nodata"}
+        keep = np.isin(self.classes, list(labels))
+        rows = [
+            {"mask_class": labels[int(value)], "geometry": shape(geom)}
+            for geom, value in shapes(self.classes, mask=keep, transform=self.transform)
+        ]
+        frame = gpd.GeoDataFrame(rows, columns=["mask_class", "geometry"], crs=self.crs)
+        if simplify_m > 0 and len(frame):
+            frame["geometry"] = frame.geometry.simplify(simplify_m, preserve_topology=True)
+        frame = frame.dissolve(by="mask_class", as_index=False) if len(frame) else frame
+        frame["area_km2"] = (frame.geometry.area / 1e6).round(4)
+        frame["synthetic"] = self.synthetic
+        return frame.to_crs("EPSG:4326")
 
 
 def load_flood_mask(path: Path, semantics: Optional[MaskSemantics] = None) -> FloodMask:

@@ -155,6 +155,16 @@ class TestLoadFloodMask:
             load_flood_mask(path, SEM)
 
 
+class TestMaskPolygons:
+    def test_areas_match_pixel_counts_and_are_wgs84(self):
+        polygons = _mask(_grid(), synthetic=True).to_polygons()
+        assert polygons.crs.to_epsg() == 4326
+        area = dict(zip(polygons["mask_class"], polygons["area_km2"]))
+        # 3 flood, 10 permanent water, 3 nodata pixels of 100 m2 each.
+        assert area == {"flood": 0.0003, "permanent_water": 0.001, "nodata": 0.0003}
+        assert polygons["synthetic"].all()
+
+
 class TestSampleClasses:
     def test_points_take_their_pixel_and_outside_is_minus_one(self):
         mask = _mask(_grid())
