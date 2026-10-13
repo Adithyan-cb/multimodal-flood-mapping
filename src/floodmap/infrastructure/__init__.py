@@ -16,5 +16,9 @@ Key constraints
   structurally failed, inaccessible, isolated unless the evidence genuinely
   supports the stronger claim (AGENTS.md §8).
 
-Status: NOT IMPLEMENTED.
+Modules
+-------
+* ``osm``: pre-event OSM retrieval from the ohsome API.
+* ``mask``: flood class mask loading, validated against the M4 output contract.
+* ``exposure``: per-feature exposure of buildings, roads and bridges.
 """

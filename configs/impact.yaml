@@ -1,0 +1,127 @@
+# =============================================================================
+# configs/impact.yaml: infrastructure exposure and road connectivity
+#
+# Multimodal AI Hackathon 2026, Track B.
+#
+# Consumed by src/floodmap/infrastructure/ and src/floodmap/network/.
+# Every value here is an analysis assumption (AGENTS.md §9, PRD.md §9), kept in
+# configuration so it can be stated in the report and varied for sensitivity.
+# Nothing in this file is specific to the Trishuli case study.
+# =============================================================================
+
+version: 0.1.0
+
+# -----------------------------------------------------------------------------
+# Pre-event OpenStreetMap via the ohsome API (AGENTS.md §3)
+#
+# Snapshot rule: the snapshot must be strictly before the event. When the
+# caller does not pass one, it defaults to 00:00 UTC on the day before the
+# event, capped at the latest timestamp ohsome holds (read from /metadata).
+# For the 2026-08-26 Trishuli event that resolves to 2026-07-27T09:00Z, which
+# matches production.osm.snapshot_date in configs/data.yaml.
+#
+# Endpoint note: /elements/geometry returned HTTP 403 when tested on
+# 2026-10-12 while /elementsFullHistory/geometry worked. The client therefore
+# requests a one-day history window ending at the snapshot and keeps only the
+# versions still valid at the snapshot, which is the same state.
+# -----------------------------------------------------------------------------
+osm:
+  base_url: "https://api.ohsome.org/v1"
+  timeout_s: 300
+  max_retries: 3
+  # Concurrent tile requests. ohsome is a free academic service; keep it low.
+  max_workers: 4
+  # Raw responses are cached here (git-ignored) so repeated runs and the live
+  # demo do not refetch identical tiles.
+  cache_dir: "data/raw/osm"
+  tile_deg: 0.1
+  # Buildings are dense, and a single large building request timed out.
+  building_tile_deg: 0.05
+  # Settlements and hubs are sparse points. Small tiles only add round trips
+  # (the first Trishuli run spent most of its time on 112 tiny hub requests).
+  point_tile_deg: 0.5
+
+  # Hubs and roads leading to them often lie outside the AOI. Without a buffer
+  # a settlement whose road leaves the AOI looks cut off when it is not.
+  buffer_km: 25
+
+  # ohsome filter language: https://docs.ohsome.org/ohsome-api/v1/filter.html
+  #
+  # Roads that count as a "road connection" (spec: "no road connection to the
+  # nearest town or hospital"). Footpaths are excluded on purpose, so a hamlet
+  # reachable only on foot is reported as having no mapped road rather than
+  # as cut off by the flood.
+  filters:
+    roads: >-
+      type:way and highway in (trunk, trunk_link, primary, primary_link,
+      secondary, secondary_link, tertiary, tertiary_link, unclassified,
+      residential, service, track)
+    # The buffer ring only has to carry routes to hubs. Residential and
+    # service streets are dropped there because the 25 km ring around
+    # Trishuli reaches the Kathmandu valley, where they are about 27k of
+    # 43k ways (ohsome count, 2026-07-27).
+    roads_buffer: >-
+      type:way and highway in (trunk, trunk_link, primary, primary_link,
+      secondary, secondary_link, tertiary, tertiary_link, unclassified, track)
+    # Footbridges are kept: they are infrastructure even though footways are
+    # not part of the road graph.
+    bridges: "type:way and highway=* and bridge=* and bridge!=no"
+    buildings: "building=* and building!=no and geometry:polygon"
+    settlements: "place in (village, hamlet)"
+
+  # Reference hubs, reported separately per group. To count clinics and
+  # health posts as hospitals, change the hospital filter to
+  # "amenity in (hospital, clinic) or healthcare in (hospital, clinic, centre)".
+  # Pending team confirmation.
+  hubs:
+    hospital: "amenity=hospital"
+    town: "place in (town, city)"
+
+# -----------------------------------------------------------------------------
+# Exposure of buildings, roads and bridges to the predicted flood class
+#
+# "Exposed" means spatial overlap with the flood class (class mask value for
+# "Floods" in configs/segmentation.yaml). It is not evidence of damage
+# (AGENTS.md §8). Permanent water never makes a feature exposed.
+# -----------------------------------------------------------------------------
+exposure:
+  # Roads and bridges are sampled every this many metres. Half the 10 m pixel
+  # (C2), so every pixel a line crosses gets at least one sample.
+  line_sample_step_m: 5.0
+  # A road or bridge is EXPOSED when at least this much of it lies on flood
+  # pixels (or all of it, if it is shorter). One pixel width.
+  line_min_flooded_m: 10.0
+  # A building is EXPOSED when at least this many flood pixels touch its
+  # footprint.
+  building_min_flood_px: 1
+
+# -----------------------------------------------------------------------------
+# Road network and settlement connectivity (AGENTS.md §9, PRD.md §9)
+#
+# Graph: undirected (oneway tags ignored: in an emergency the question is
+# whether a road exists, not its legal direction). Edges are road pieces
+# between junctions, a junction being any OSM node shared by two ways, a way
+# end, or the road vertex a settlement or hub attaches to. Weight is length.
+#
+# Disruption: a piece is removed when its flooded length reaches the
+# threshold (or all of it, if shorter). Roads outside the flood mask are
+# assumed passable, which is an assumption, not an observation.
+#
+# Status per settlement and hub group, comparing before vs after the flood:
+#   CONNECTED              reaches a hub; route not much longer
+#   POTENTIALLY_DISRUPTED  reaches a hub, but the route grew by detour_ratio
+#   POTENTIALLY_CUT_OFF    reached a hub before, reaches none after
+#   UNKNOWN                cut off only if nodata pixels hide flood
+#   INSUFFICIENT_DATA      no mapped road nearby, or no road route to a hub
+#                          even before the flood
+# -----------------------------------------------------------------------------
+network:
+  # Settlements and hubs farther than this from any road get no verdict.
+  snap_max_m: 500
+  # Flooded length (m) on one piece that removes it. Matches
+  # exposure.line_min_flooded_m so "exposed" and "removed" agree by default.
+  default_disruption_m: 10
+  # Re-run with these thresholds and report how the cut-off count moves.
+  sensitivity_disruption_m: [10, 30, 100]
+  # Route longer than this multiple of the pre-event route is a detour.
+  detour_ratio: 1.5

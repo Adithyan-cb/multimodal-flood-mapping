@@ -19,5 +19,9 @@ Key constraints
 * Network disconnection is an inference about modelled accessibility, not
   confirmed human isolation (architecture.md §18).
 
-Status: NOT IMPLEMENTED.
+Modules
+-------
+* ``graph``: road pieces between junctions as an undirected multigraph.
+* ``connectivity``: before/after reachability from settlements to hub groups,
+  disruption-threshold sensitivity, routes and settlement statuses.
 """

@@ -1,0 +1,69 @@
+# =============================================================================
+# configs/baseline.yaml: Sentinel-1 change-detection flood baseline
+#
+# Multimodal AI Hackathon 2026, Track B.
+#
+# A deterministic, non-learned flood mask from a pre/post Sentinel-1 pair on
+# the same relative orbit. Two jobs:
+#   1. give the impact layer (exposure, connectivity) a real flood map for any
+#      AOI and date even if the learned model is unavailable;
+#   2. be the baseline the learned model must beat (AGENTS.md §5: "baseline
+#      performance" before committing to a model).
+#
+# Output follows the frozen M4 class-mask contract (C1, C2, C9) so it is a
+# drop-in for the model output: uint8, UTM, 10 m, 0/1/2, nodata 255.
+#
+# Every threshold below is an assumption to state in the report, not a tuned
+# value. None was fitted on any reference flood map.
+# =============================================================================
+
+version: 0.1.0
+
+source:
+  # Sentinel-1 GRD radiometrically terrain corrected (gamma0, linear power)
+  # by Catalyst on Microsoft Planetary Computer, using the Copernicus DEM.
+  # Anonymous access. Licence CC-BY-4.0; credit Catalyst and Microsoft.
+  stac_url: "https://planetarycomputer.microsoft.com/api/stac/v1"
+  token_url: "https://planetarycomputer.microsoft.com/api/sas/v1/token"
+  s1_collection: "sentinel-1-rtc"
+  dem_collection: "cop-dem-glo-30"
+  # Raw scenes are cached here (git-ignored) so reruns and the live demo do
+  # not re-download.
+  cache_dir: "data/raw/s1"
+  timeout_s: 120
+
+pair:
+  # The event day itself is excluded from both sides: the time of the event
+  # is not known, so an image that day could be either.
+  # Post: earliest acquisition within this many days after the event.
+  max_post_days: 12
+  # Pre: latest acquisition on the SAME relative orbit and pass direction
+  # within this many days before the event (organizer guidance: compare the
+  # same track; different tracks see terrain from different angles).
+  max_pre_days: 36
+  # An acquisition (all slices of one pass on one day) must cover at least
+  # this fraction of the AOI to be used.
+  min_aoi_coverage: 0.9
+
+grid:
+  # C2: 10 m on the AOI's UTM grid (C1). Bilinear resampling in linear power,
+  # before conversion to dB (C3).
+  pixel_m: 10.0
+
+classification:
+  polarisation: "VV"
+  # Boxcar mean in linear power before thresholding, to suppress speckle.
+  # Odd number of pixels; 5 = 50 m.
+  speckle_window_px: 5
+  # Open water is a specular reflector and returns little energy. Pixels
+  # darker than this in VV gamma0 are treated as water.
+  water_db: -18.0
+  # New water must also have darkened by at least this much since the
+  # pre-event image (log-ratio change, dB).
+  change_db: -3.0
+  # Steeper terrain is set to nodata: radar shadow and layover concentrate
+  # there, and standing flood water is implausible. Proxy for a shadow mask,
+  # which the source does not provide.
+  max_slope_deg: 20.0
+  # Flood patches smaller than this many pixels are removed (sieve).
+  min_flood_px: 10
